@@ -1,37 +1,33 @@
 drop table if exists "user_role" cascade;
-
 drop table if exists "post_comment" cascade;
-
+drop table if exists "post_comment_reply" cascade;
 drop table if exists "post" cascade;
-
 drop table if exists "role" cascade;
-
 drop table if exists "user" cascade;
-
 drop table if exists "post_category" cascade;
-
 drop table if exists "category" cascade;
-
 drop table if exists "post_tag" cascade;
-
 drop table if exists "post_tag" cascade;
-
 drop table if exists "tag" cascade;
-
 drop table if exists "user_category" cascade;
-
 drop table if exists "user_tag" cascade;
-
 drop trigger if exists update_date_on_update_task on post;
-
+drop trigger if exists update_date_on_update_task on post_comment;
+drop trigger if exists update_date_on_update_task on post_comment_reply;
 drop function if exists update_date_on_update_task();
 
 create table if not exists "role"
 (
-    id        int          not null,
-    role_name varchar(100) not null,
+    id                    int          not null,
+    role_name             varchar(100) not null,
+    data_created          timestamp    not null,
+    normalized_role_name  varchar(100) not null,
+    concurrency_timestamp uuid         not null,
     CONSTRAINT pk_role_id primary key (id)
 );
+
+create index if not exists idx_role_normalized_role_name on "role" (normalized_role_name);
+create index if not exists idx_role_data_created on "role" (data_created);
 
 create table if not exists "user"
 (
@@ -98,18 +94,42 @@ create table if not exists "user_role"
 
 create table if not exists "post_comment"
 (
-    id           int          not null,
-    post_id      int          not null,
-    user_id      int          not null,
-    comment      varchar(255) not null,
-    date_created timestamp    not null,
+    id              int          not null,
+    post_id         int          not null,
+    user_id         int          not null,
+    content         varchar(255) not null,
+    content_length  int          not null,
+    content_preview varchar(255) not null,
+    word_count      int          not null,
+    date_created    timestamp    not null,
+    date_updated    timestamp    not null,
     constraint pk_post_comment_id primary key (id),
     constraint fk_post_id foreign key (post_id) references "post" (id),
     constraint fk_user_id foreign key (user_id) references "user" (id)
 );
 
 create index if not exists idx_post_comment_date_created on "post_comment" (date_created);
-create index if not exists idx_post_comment_comment on "post_comment" (comment);
+create index if not exists idx_post_comment_comment on "post_comment" (content);
+
+-- create the post_comment_reply table
+create table "post_comment_reply"
+(
+    id              int                                not null,
+    content         text                               not null,
+    content_length  int                                not null,
+    content_preview varchar(255)                       not null,
+    word_count      int                                not null,
+    date_created    timestamp                           not null,
+    date_updated    timestamp default current_timestamp not null,
+    user_id         int                                not null,
+    post_comment_id int                                not null,
+    constraint pk_post_comment_reply_id primary key (id),
+    constraint fk_post_comment_reply_user_id foreign key (user_id) references "user" (id),
+    constraint fk_post_comment_reply_post_comment_id foreign key (post_comment_id) references "post_comment" (id)
+);
+
+create index idx_post_comment_reply_date_created on post_comment_reply (date_created);
+create index idx_post_comment_reply_date_updated on post_comment_reply (date_updated);
 
 create table if not exists "category"
 (
@@ -179,9 +199,23 @@ begin
 end;
 $$ language 'plpgsql';
 
-create trigger update_date_on_update_task
+create trigger update_date_on_update_task_post
     before
         update
     on post
+    for each row
+execute procedure update_date_on_update_task();
+
+create trigger update_date_on_update_task_post_comment
+    before
+        update
+    on post_comment
+    for each row
+execute procedure update_date_on_update_task();
+
+create trigger update_date_on_update_task_post_comment_reply
+    before
+        update
+    on post_comment_reply
     for each row
 execute procedure update_date_on_update_task();
